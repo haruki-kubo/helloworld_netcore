@@ -1,24 +1,24 @@
-# .NET Coreの実行環境のイメージ
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-
-# 5000ポートで受け付けるように設定する
-ENV ASPNETCORE_URLS http://+:5000
 EXPOSE 5000
 
-# .NET Coreのビルド環境のイメージ
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS publish
-WORKDIR /src
-COPY . .
+ENV ASPNETCORE_URLS=http://+:5000
 
-# ビルド環境でソースコードをビルドし、実行に必要な依存関係を含めて出力
-RUN dotnet publish -c Release -o /out
+USER app
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG configuration=Release
+WORKDIR /src
+COPY ["helloworld_netcore.csproj", "./"]
+RUN dotnet restore "helloworld_netcore.csproj"
+COPY . .
+WORKDIR "/src/."
+RUN dotnet build "helloworld_netcore.csproj" -c $configuration -o /app/build
+
+FROM build AS publish
+ARG configuration=Release
+RUN dotnet publish "helloworld_netcore.csproj" -c $configuration -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
-
-# .NET Coreの実行環境へビルド結果をコピーする
-COPY --from=publish /out .
-
-# .NET Coreのアプリを実行する
-CMD ["dotnet", "/app/helloworld_netcore.dll"]
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "helloworld_netcore.dll"]
